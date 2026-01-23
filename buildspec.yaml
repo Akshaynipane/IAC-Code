@@ -15,8 +15,8 @@ phases:
       - sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
       - sudo yum -y install terraform
       - sudo yum install -y curl jq git
-
-pre_build:
+      
+  pre_build:
     commands:
       - echo "Checking Terraform version..."
       - terraform version
@@ -30,7 +30,6 @@ pre_build:
           export CODEBUILD_GIT_BRANCH="$(git rev-parse HEAD | xargs git name-rev | cut -d' ' -f2 | sed 's/remotes\/origin\///g')";
         fi
       - export CODEBUILD_PROJECT=${CODEBUILD_BUILD_ID%:$CODEBUILD_LOG_PATH}
-
       - echo "Downloading cortexcli"
       - |
         crtx_resp=$(curl "${CORTEX_API_URL}/public_api/v1/unified-cli/releases/download-link?os=linux&architecture=amd64" \
@@ -40,8 +39,7 @@ pre_build:
       - curl -o cortexcli "$crtx_url"
       - chmod +x cortexcli
       - ./cortexcli --version
-
-build:
+  build:
     commands:
       - echo "Creating Terraform plan..."
       - terraform plan -out=tfplan.binary
@@ -56,12 +54,11 @@ build:
                    --branch $CODEBUILD_GIT_BRANCH \
                    --source AWS_CODE_BUILD \
                    --create-repo-if-missing
-
-artifacts:
-  files:
+  artifacts:
+    files:
     - '**/*'
 
-post_build:
+  post_build:
     commands:
       - echo "Applying Terraform changes..."
       - terraform apply -auto-approve tfplan.binary
