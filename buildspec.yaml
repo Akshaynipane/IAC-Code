@@ -10,11 +10,11 @@ env:
 phases:
   install:
     commands:
-      - apt-get update
+      - sudo yum update
       - sudo yum install -y yum-utils shadow-utils
       - sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
       - sudo yum -y install terraform
-      - apt-get install -y curl jq git
+      - sudo yum install -y curl jq git
 
 pre_build:
     commands:
