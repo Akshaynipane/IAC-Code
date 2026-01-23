@@ -54,9 +54,6 @@ phases:
                    --branch $CODEBUILD_GIT_BRANCH \
                    --source AWS_CODE_BUILD \
                    --create-repo-if-missing
-  artifacts:
-    files:
-    - '**/*'
 
   post_build:
     commands:
@@ -64,3 +61,6 @@ phases:
       - terraform apply -auto-approve tfplan.binary
       - echo "Terraform apply complete!"
 
+artifacts:
+    files:
+    - '**/*'
