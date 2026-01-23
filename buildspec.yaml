@@ -3,13 +3,11 @@ version: 0.2
 phases:
   install:
     commands:
-      # Install Terraform CLI
-      - curl -L https://releases.hashicorp.com -o terraform.zip
-      - unzip terraform.zip
-      - mv terraform /usr/local/bin/
-      - rm terraform.zip
+      - sudo yum install -y yum-utils shadow-utils
+      - sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+      - sudo yum install terraform  
 
-  pre_build:
+pre_build:
     commands:
       - echo "Checking Terraform version..."
       - terraform version
