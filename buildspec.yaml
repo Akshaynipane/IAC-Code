@@ -14,12 +14,12 @@ pre_build:
       - echo "Initializing Terraform..."
       - terraform init
 
-  build:
+build:
     commands:
       - echo "Creating Terraform plan..."
       - terraform plan -out=tfplan.binary
 
-  post_build:
+post_build:
     commands:
       - echo "Applying Terraform changes..."
       - terraform apply -auto-approve tfplan.binary
