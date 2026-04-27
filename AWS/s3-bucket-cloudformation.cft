@@ -1,18 +1,18 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CloudFormation template to create an S3 bucket with best practices'
+Description: 'CloudFormation template to create an S3 bucket with common misconfigurations for security testing'
 
 Parameters:
   BucketName:
     Type: String
     Description: Name of the S3 bucket (must be globally unique)
-    Default: ''
+    Default: 'my-insecure-bucket-demo'
     AllowedPattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$|^$'
     ConstraintDescription: Bucket name must be lowercase, alphanumeric, and can contain hyphens
   
   EnableVersioning:
     Type: String
     Description: Enable versioning for the S3 bucket
-    Default: 'Enabled'
+    Default: 'Suspended'
     AllowedValues:
       - 'Enabled'
       - 'Suspended'
@@ -20,7 +20,7 @@ Parameters:
   EnableEncryption:
     Type: String
     Description: Enable server-side encryption
-    Default: 'true'
+    Default: 'false'
     AllowedValues:
       - 'true'
       - 'false'
@@ -34,31 +34,34 @@ Resources:
     Type: 'AWS::S3::Bucket'
     Properties:
       BucketName: !If [HasBucketName, !Ref BucketName, !Ref 'AWS::NoValue']
+      # MISCONFIGURATION 1: Versioning disabled by default
       VersioningConfiguration:
         Status: !Ref EnableVersioning
+      # MISCONFIGURATION 2: Encryption disabled by default
       BucketEncryption: !If
         - EnableEncryptionCondition
         - ServerSideEncryptionConfiguration:
             - ServerSideEncryptionByDefault:
                 SSEAlgorithm: 'AES256'
         - !Ref 'AWS::NoValue'
+      # MISCONFIGURATION 3: Public access NOT blocked
       PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: DeleteIncompleteMultipartUploads
-            Status: Enabled
-            AbortIncompleteMultipartUpload:
-              DaysAfterInitiation: 7
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      # MISCONFIGURATION 4: No lifecycle rules for cleanup
+      # LifecycleConfiguration removed
+      # MISCONFIGURATION 5: Missing logging configuration
       Tags:
         - Key: Name
           Value: !If [HasBucketName, !Ref BucketName, !Ref 'AWS::StackName']
         - Key: ManagedBy
           Value: CloudFormation
+        - Key: Environment
+          Value: Development
 
+  # MISCONFIGURATION 6: Overly permissive bucket policy
   S3BucketPolicy:
     Type: 'AWS::S3::BucketPolicy'
     Properties:
@@ -66,16 +69,36 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: DenyInsecureTransport
-            Effect: Deny
+          # MISCONFIGURATION 7: Allows public read access
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+            Resource: !Sub '${S3Bucket.Arn}/*'
+          # MISCONFIGURATION 8: No HTTPS enforcement (missing SecureTransport condition)
+          - Sid: AllowAllActions
+            Effect: Allow
             Principal: '*'
             Action: 's3:*'
             Resource:
               - !GetAtt S3Bucket.Arn
               - !Sub '${S3Bucket.Arn}/*'
-            Condition:
-              Bool:
-                'aws:SecureTransport': 'false'
+
+  # MISCONFIGURATION 9: Bucket ACL with public read access
+  S3BucketAcl:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: GrantPublicRead
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${S3Bucket.Arn}/*'
 
 Outputs:
   BucketName:
@@ -101,5 +124,11 @@ Outputs:
     Value: !GetAtt S3Bucket.RegionalDomainName
     Export:
       Name: !Sub '${AWS::StackName}-BucketRegionalDomainName'
+  
+  # MISCONFIGURATION 10: Exposing bucket URL publicly
+  BucketWebsiteURL:
+    Description: Public URL of the S3 bucket
+    Value: !Sub 'http://${S3Bucket}.s3-website-${AWS::Region}.amazonaws.com'
 
-# Made with Bob
+# WARNING: This template contains intentional security misconfigurations for testing purposes
+# DO NOT use in production environments
