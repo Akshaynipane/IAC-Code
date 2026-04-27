@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to create an S3 bucket with best practices'
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket (must be globally unique)
+    Default: ''
+    AllowedPattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$|^$'
+    ConstraintDescription: Bucket name must be lowercase, alphanumeric, and can contain hyphens
+  
+  EnableVersioning:
+    Type: String
+    Description: Enable versioning for the S3 bucket
+    Default: 'Enabled'
+    AllowedValues:
+      - 'Enabled'
+      - 'Suspended'
+  
+  EnableEncryption:
+    Type: String
+    Description: Enable server-side encryption
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+Conditions:
+  HasBucketName: !Not [!Equals [!Ref BucketName, '']]
+  EnableEncryptionCondition: !Equals [!Ref EnableEncryption, 'true']
+
+Resources:
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !If [HasBucketName, !Ref BucketName, !Ref 'AWS::NoValue']
+      VersioningConfiguration:
+        Status: !Ref EnableVersioning
+      BucketEncryption: !If
+        - EnableEncryptionCondition
+        - ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: 'AES256'
+        - !Ref 'AWS::NoValue'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Name
+          Value: !If [HasBucketName, !Ref BucketName, !Ref 'AWS::StackName']
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  S3BucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt S3Bucket.Arn
+              - !Sub '${S3Bucket.Arn}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+
+Outputs:
+  BucketName:
+    Description: Name of the S3 bucket
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+  
+  BucketArn:
+    Description: ARN of the S3 bucket
+    Value: !GetAtt S3Bucket.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketArn'
+  
+  BucketDomainName:
+    Description: Domain name of the S3 bucket
+    Value: !GetAtt S3Bucket.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketDomainName'
+  
+  BucketRegionalDomainName:
+    Description: Regional domain name of the S3 bucket
+    Value: !GetAtt S3Bucket.RegionalDomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketRegionalDomainName'
+
+# Made with Bob
