@@ -1,0 +1,19 @@
+# Example terraform.tfvars file
+# Copy this file to terraform.tfvars and update with your values
+
+resource_group_name      = "rg-storage-prod"
+location                 = "East US"
+storage_account_name     = "stproddata001"
+account_tier             = "Standard"
+account_replication_type = "GRS"
+container_name           = "production-data"
+container_access_type    = "private"
+enable_https_traffic_only = true
+min_tls_version          = "TLS1_2"
+
+tags = {
+  Environment = "Production"
+  ManagedBy   = "Terraform"
+  Project     = "DataStorage"
+  CostCenter  = "IT"
+}
