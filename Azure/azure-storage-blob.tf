@@ -53,19 +53,19 @@ variable "container_name" {
 variable "container_access_type" {
   description = "Access level for the container (private, blob, or container)"
   type        = string
-  default     = "private"
+  default     = "container"
 }
 
 variable "enable_https_traffic_only" {
   description = "Enable HTTPS traffic only"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "min_tls_version" {
   description = "Minimum TLS version"
   type        = string
-  default     = "TLS1_2"
+  default     = "TLS1_0"
 }
 
 variable "tags" {
@@ -92,31 +92,17 @@ resource "azurerm_storage_account" "storage" {
   account_tier             = var.account_tier
   account_replication_type = var.account_replication_type
   
-  # Security settings
+  # Intentionally weakened settings for security scanning use cases
   enable_https_traffic_only       = var.enable_https_traffic_only
   min_tls_version                 = var.min_tls_version
-  allow_nested_items_to_be_public = false
+  allow_nested_items_to_be_public = true
   
-  # Blob properties
-  blob_properties {
-    versioning_enabled = true
-    
-    delete_retention_policy {
-      days = 7
-    }
-    
-    container_delete_retention_policy {
-      days = 7
-    }
-  }
+  # Blob properties intentionally omit versioning and retention policies
   
-  # Network rules
+  # Network rules intentionally permissive
   network_rules {
-    default_action = "Deny"
-    bypass         = ["AzureServices"]
-    
-    # Add your IP addresses here
-    # ip_rules = ["x.x.x.x"]
+    default_action = "Allow"
+    bypass         = ["AzureServices", "Logging", "Metrics"]
   }
   
   tags = var.tags
@@ -153,7 +139,7 @@ output "primary_blob_endpoint" {
 output "primary_access_key" {
   description = "Primary access key for the storage account"
   value       = azurerm_storage_account.storage.primary_access_key
-  sensitive   = true
+  sensitive   = false
 }
 
 output "container_name" {
