@@ -40,8 +40,6 @@ jobs:
         ./cortexcli --version
 
     - name: Run Cortex CLI Code Scan
-      id: cortex-scan
-      continue-on-error: true
       run: |
         ./cortexcli \
           --api-base-url "${CORTEX_API_URL}" \
@@ -53,15 +51,3 @@ jobs:
           --branch "${{github.ref_name}}" \
           --source "GITHUB_ACTIONS" \
           --create-repo-if-missing
-    
-    - name: Check Scan Results and Block on Critical Issues
-      run: |
-        # Check if the scan step failed (indicating issues were found)
-        if [ "${{ steps.cortex-scan.outcome }}" == "failure" ]; then
-          echo "❌ BLOCKING: Cortex CLI scan detected security issues"
-          echo "Please review the scan results and fix critical/high severity issues before merging."
-          echo "Check the Cortex dashboard for detailed findings."
-          exit 1
-        else
-          echo "✅ Cortex CLI scan completed successfully. No blocking issues found."
-        fi
