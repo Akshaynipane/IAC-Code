@@ -40,6 +40,7 @@ jobs:
         ./cortexcli --version
 
     - name: Run Cortex CLI Code Scan
+      id: cortex-scan
       run: |
         ./cortexcli \
           --api-base-url "${CORTEX_API_URL}" \
@@ -50,4 +51,37 @@ jobs:
           --repo-id "${{github.repository}}" \
           --branch "${{github.ref_name}}" \
           --source "GITHUB_ACTIONS" \
-          --create-repo-if-missing
+          --create-repo-if-missing \
+          --output-format json > scan_results.json || true
+    
+    - name: Check Scan Results and Block on Critical Issues
+      run: |
+        if [ -f scan_results.json ]; then
+          echo "Analyzing scan results..."
+          
+          # Extract critical and high severity issues count
+          critical_count=$(jq '[.results[]? | select(.severity == "CRITICAL")] | length' scan_results.json 2>/dev/null || echo "0")
+          high_count=$(jq '[.results[]? | select(.severity == "HIGH")] | length' scan_results.json 2>/dev/null || echo "0")
+          
+          echo "Critical issues found: $critical_count"
+          echo "High severity issues found: $high_count"
+          
+          # Block workflow if critical or high severity issues are found
+          if [ "$critical_count" -gt 0 ] || [ "$high_count" -gt 0 ]; then
+            echo "❌ BLOCKING: Found $critical_count critical and $high_count high severity issues"
+            echo "Please fix these security issues before merging."
+            exit 1
+          else
+            echo "✅ No critical or high severity issues found. Workflow can proceed."
+          fi
+        else
+          echo "⚠️ Warning: Scan results file not found. Proceeding with caution."
+        fi
+    
+    - name: Upload Scan Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: cortex-scan-results
+        path: scan_results.json
+        retention-days: 30
