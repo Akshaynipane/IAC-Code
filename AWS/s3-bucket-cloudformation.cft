@@ -1,13 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudFormation '
-
-Parameters:
-  BucketName:
-    Type: String
-    Description: Name of the S3 bucket (must be globally unique)
-    Default: 'my-insecure-bucket-demo'
-    AllowedPattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$|^$'
-    ConstraintDescription: Bucket name must be lowercase, alphanumeric, and can contain hyphens
   
   EnableVersioning:
     Type: String
