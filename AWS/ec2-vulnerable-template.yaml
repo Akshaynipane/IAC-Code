@@ -1,0 +1,276 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Vulnerable EC2 Instance Template - Contains multiple security misconfigurations'
+
+Parameters:
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    Description: 'Latest Amazon Linux 2 AMI ID'
+
+Resources:
+  # VPC Configuration
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: VulnerableVPC
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: VulnerableIGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public Subnet
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true  # VULNERABILITY: Auto-assign public IP
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: VulnerablePublicSubnet
+
+  # Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # VULNERABILITY: Overly permissive Security Group allowing internet access
+  VulnerableSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: VulnerableSecurityGroup
+      GroupDescription: 'Security group with overly permissive rules - allows internet access'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # VULNERABILITY: SSH open to the internet
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: 'SSH access from anywhere'
+        # VULNERABILITY: HTTP open to the internet
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: 'HTTP access from anywhere'
+        # VULNERABILITY: HTTPS open to the internet
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: 'HTTPS access from anywhere'
+        # VULNERABILITY: RDP open to the internet
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+          Description: 'RDP access from anywhere'
+        # VULNERABILITY: All traffic from internet
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: 'All traffic from anywhere'
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: 'Allow all outbound traffic'
+      Tags:
+        - Key: Name
+          Value: VulnerableSecurityGroup
+
+  # IAM Role for EC2 (minimal permissions)
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+      Tags:
+        - Key: Name
+          Value: EC2InstanceRole
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # VULNERABLE EC2 Instance
+  VulnerableEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true  # VULNERABILITY: Public IP assigned
+          DeviceIndex: '0'
+          GroupSet:
+            - !Ref VulnerableSecurityGroup
+          SubnetId: !Ref PublicSubnet
+      # VULNERABILITY: IMDSv2 not enforced (using default IMDSv1)
+      MetadataOptions:
+        HttpTokens: optional  # VULNERABILITY: Should be 'required' for IMDSv2
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      # VULNERABILITY: Hardcoded secrets in UserData
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # VULNERABILITY: Hardcoded credentials and secrets in UserData
+          
+          # Update system
+          yum update -y
+          
+          # VULNERABILITY: Hardcoded database credentials
+          export DB_USERNAME="admin"
+          export DB_PASSWORD="SuperSecret123!"
+          export DB_HOST="database.example.com"
+          export DB_PORT="5432"
+          
+          # VULNERABILITY: Hardcoded API keys
+          export API_KEY="AKIAIOSFODNN7EXAMPLE"
+          export API_SECRET="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+          
+          # VULNERABILITY: Hardcoded AWS credentials
+          mkdir -p /root/.aws
+          cat > /root/.aws/credentials << EOF
+          [default]
+          aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+          aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+          region = us-east-1
+          EOF
+          
+          # VULNERABILITY: Hardcoded private keys
+          cat > /root/.ssh/id_rsa << EOF
+          -----BEGIN RSA PRIVATE KEY-----
+          MIIEpAIBAAKCAQEAyXxYz1234567890abcdefghijklmnopqrstuvwxyz
+          EXAMPLE_PRIVATE_KEY_DO_NOT_USE_IN_PRODUCTION
+          -----END RSA PRIVATE KEY-----
+          EOF
+          chmod 600 /root/.ssh/id_rsa
+          
+          # VULNERABILITY: Hardcoded tokens
+          export GITHUB_TOKEN="ghp_1234567890abcdefghijklmnopqrstuvwxyz"
+          export SLACK_WEBHOOK="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX"
+          
+          # Install web server
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          
+          # Create a simple web page
+          cat > /var/www/html/index.html << EOF
+          <html>
+          <head><title>Vulnerable EC2 Instance</title></head>
+          <body>
+            <h1>Vulnerable EC2 Instance</h1>
+            <p>This instance has multiple security vulnerabilities:</p>
+            <ul>
+              <li>Public IP address assigned</li>
+              <li>Security group allows access from internet (0.0.0.0/0)</li>
+              <li>Hardcoded secrets in UserData</li>
+              <li>IMDSv2 not enforced (using IMDSv1)</li>
+            </ul>
+          </body>
+          </html>
+          EOF
+          
+          # VULNERABILITY: Store credentials in plain text file
+          cat > /home/ec2-user/credentials.txt << EOF
+          Database Credentials:
+          Username: admin
+          Password: SuperSecret123!
+          Host: database.example.com
+          
+          API Credentials:
+          API_KEY: AKIAIOSFODNN7EXAMPLE
+          API_SECRET: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+          EOF
+          chmod 644 /home/ec2-user/credentials.txt
+          
+          echo "Instance setup complete with vulnerabilities!"
+      Tags:
+        - Key: Name
+          Value: VulnerableEC2Instance
+        - Key: Environment
+          Value: Development
+        - Key: Security
+          Value: Vulnerable
+
+Outputs:
+  InstanceId:
+    Description: 'Instance ID of the vulnerable EC2 instance'
+    Value: !Ref VulnerableEC2Instance
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+
+  PublicIP:
+    Description: 'Public IP address of the vulnerable EC2 instance'
+    Value: !GetAtt VulnerableEC2Instance.PublicIp
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+
+  PublicDNS:
+    Description: 'Public DNS name of the vulnerable EC2 instance'
+    Value: !GetAtt VulnerableEC2Instance.PublicDnsName
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicDNS'
+
+  SecurityGroupId:
+    Description: 'Security Group ID with overly permissive rules'
+    Value: !Ref VulnerableSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroupId'
+
+  VulnerabilitySummary:
+    Description: 'Summary of security vulnerabilities in this template'
+    Value: |
+      1. EC2 instance has public IP address assigned
+      2. Security group allows access from internet (0.0.0.0/0) on multiple ports
+      3. UserData contains hardcoded secrets (DB credentials, API keys, AWS credentials)
+      4. IMDSv2 not enforced - using optional mode (IMDSv1 still accessible)
+      5. SSH (22), HTTP (80), HTTPS (443), RDP (3389) open to internet
+      6. All inbound traffic allowed from 0.0.0.0/0
+
+# Made with Bob
