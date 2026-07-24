@@ -16,7 +16,7 @@ Resources:
       EnableDnsHostnames: true
       EnableDnsSupport: true
       Tags:
-        - Key: Name
+        - Key: Name2
           Value: VulnerableVPC
 
   # Internet Gateway
