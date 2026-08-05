@@ -45,15 +45,6 @@ Resources:
         - Key: Name
           Value: VulnerablePublicSubnet
 
-  # Route Table
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: PublicRouteTable
-
   PublicRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
